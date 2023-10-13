@@ -272,6 +272,7 @@ int fork(void) {
 void reparent(struct proc *p) {
   struct proc *pp;
 
+  int child_cnt = 0;
   for (pp = proc; pp < &proc[NPROC]; pp++) {
     // this code uses pp->parent without holding pp->lock.
     // acquiring the lock first could cause a deadlock
@@ -281,6 +282,7 @@ void reparent(struct proc *p) {
       // pp->parent can't change between the check and the acquire()
       // because only the parent changes it, and we're the parent.
       acquire(&pp->lock);
+      exit_info("proc %d exit, child %d, pid %d, name %s, state %s\n", p->pid, child_cnt++, pp->pid, pp->name, exit_info_states(pp->state));
       pp->parent = initproc;
       // we should wake up init here, but that would require
       // initproc->lock, which would be a deadlock, since we hold
@@ -335,6 +337,7 @@ void exit(int status) {
   // we need the parent's lock in order to wake it up from wait().
   // the parent-then-child rule says we have to lock it first.
   acquire(&original_parent->lock);
+  exit_info("proc %d exit, parent pid %d, name %s, state %s\n", p->pid, original_parent->pid, original_parent->name, exit_info_states(original_parent->state));
 
   acquire(&p->lock);
 
@@ -356,7 +359,7 @@ void exit(int status) {
 
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
-int wait(uint64 addr) {
+int wait(uint64 addr, int flags) {
   struct proc *np;
   int havekids, pid;
   struct proc *p = myproc();
@@ -400,6 +403,10 @@ int wait(uint64 addr) {
       return -1;
     }
 
+    if (flags) { // Non-blocking wait.
+      release(&p->lock);
+      return -1;
+    }
     // Wait for a child to exit.
     sleep(p, &p->lock);  // DOC: wait-sleep
   }
@@ -472,6 +479,7 @@ void sched(void) {
 void yield(void) {
   struct proc *p = myproc();
   acquire(&p->lock);
+  printf("start to yield, user pc %p\n", p->trapframe->epc-4);
   p->state = RUNNABLE;
   sched();
   release(&p->lock);

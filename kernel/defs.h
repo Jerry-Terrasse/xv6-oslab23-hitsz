@@ -85,6 +85,7 @@ void            _printf(const char*, unsigned int, char*, ... );
 void            _printf(char*, ... );
 #endif
 
+#define exit_info_states(state) ("UNUSED\0\0\0SLEEPING\0RUNNABLE\0RUNNING\0\0ZOMBIE" + 9*(state))
 #define exit_info(...) info_with_color(__VA_ARGS__)
 void            info_with_color(char*, ... );
 
@@ -108,7 +109,7 @@ void            sched(void);
 void            setproc(struct proc*);
 void            sleep(void*, struct spinlock*);
 void            userinit(void);
-int             wait(uint64);
+int             wait(uint64, int);
 void            wakeup(void*);
 void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
