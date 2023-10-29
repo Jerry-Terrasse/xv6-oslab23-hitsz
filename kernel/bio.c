@@ -105,7 +105,7 @@ bget(uint dev, uint blockno)
         new_b = b;
         b->prev->next = b->next;
         b->next->prev = b->prev;
-        bcaches[i].head.next->prev = b->prev; // TODO
+        bcaches[i].head.next->prev = b->prev;
         bcaches[i].head.next = b->next;
         break;
       }
