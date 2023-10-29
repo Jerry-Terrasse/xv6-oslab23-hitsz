@@ -79,6 +79,7 @@ void
 kfree(void *pa)
 {
   struct run *r;
+  push_off();
   int cid = cpuid();
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
@@ -93,6 +94,7 @@ kfree(void *pa)
   r->next = kmems[cid].freelist;
   kmems[cid].freelist = r;
   release(&kmems[cid].lock);
+  pop_off();
 }
 
 // void
@@ -121,6 +123,7 @@ void *
 kalloc(void)
 {
   struct run *r;
+  push_off();
   int cid = cpuid();
 
   acquire(&kmems[cid].lock);
@@ -145,5 +148,6 @@ kalloc(void)
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
+  pop_off();
   return (void*)r;
 }
