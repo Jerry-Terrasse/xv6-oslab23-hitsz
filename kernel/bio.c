@@ -97,6 +97,7 @@ bget(uint dev, uint blockno)
   }
 
   // steal from aother hash bucket
+  release(&bcaches[hid].lock);
   struct buf *new_b = 0;
   for(int i = (hid+1)&HASHMASK; i != hid; i = (i+1)&HASHMASK) {
     acquire(&bcaches[i].lock);
@@ -113,6 +114,7 @@ bget(uint dev, uint blockno)
     release(&bcaches[i].lock);
   }
   if(new_b) {
+    acquire(&bcaches[hid].lock);
     new_b->dev = dev;
     new_b->blockno = blockno;
     new_b->valid = 0;
