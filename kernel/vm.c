@@ -394,12 +394,15 @@ void printwalk(pagetable_t pt, int depth, uint64 va)
       flags[1] = (pte & PTE_W) ? 'w' : '-';
       flags[2] = (pte & PTE_X) ? 'x' : '-';
       flags[3] = (pte & PTE_U) ? 'u' : '-';
-      va |= i << ((3 - depth) * 9) << 12;
+
+      int offset = ((2 - depth) * 9) + 12;
+      va &= ~(PXMASK << offset);
+      va |= i << offset;
 
       if(depth == 2) {
         // leaf
         // printf("idx: [索引编号]: va: [虚拟地址] -> pa: [物理地址], flags: [四个权限位(r/w/x/u)]");
-        printf("%sidx: %d: va: %p, pa: %p, flags: %s\n", print_prefix[depth], i, va, PTE2PA(pte), flags);
+        printf("%sidx: %d: va: %p -> pa: %p, flags: %s\n", print_prefix[depth], i, va, PTE2PA(pte), flags);
       } else {
         printf("%sidx: %d: pa: %p, flags: %s\n", print_prefix[depth], i, PTE2PA(pte), flags);
       }
