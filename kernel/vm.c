@@ -45,6 +45,51 @@ void kvminit() {
   kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 }
 
+pagetable_t kproc_pagetable()
+{
+  pagetable_t k_pagetable = (pagetable_t)kalloc();
+  memset(k_pagetable, 0, PGSIZE);
+
+  // uart registers
+  // kvmmap(UART0, UART0, PGSIZE, PTE_R | PTE_W);
+  if(mappages(k_pagetable, UART0, PGSIZE, UART0, PTE_R | PTE_W)) panic("kproc_pagetable mappages UART0");
+
+  // virtio mmio disk interface
+  // kvmmap(VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+  if(mappages(k_pagetable, VIRTIO0, PGSIZE, VIRTIO0, PTE_R | PTE_W)) panic("kproc_pagetable mappages VIRTIO0");
+
+  // CLINT
+  // kvmmap(CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+  // if(mappages(k_pagetable, CLINT, 0x10000, CLINT, PTE_R | PTE_W)) panic("kproc_pagetable mappages CLINT");
+
+  // PLIC
+  // kvmmap(PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+  if(mappages(k_pagetable, PLIC, 0x400000, PLIC, PTE_R | PTE_W)) panic("kproc_pagetable mappages PLIC");
+
+  // map kernel text executable and read-only.
+  // kvmmap(KERNBASE, KERNBASE, (uint64)etext - KERNBASE, PTE_R | PTE_X);
+  if(mappages(k_pagetable, KERNBASE, (uint64)etext - KERNBASE, KERNBASE, PTE_R | PTE_X)) panic("kproc_pagetable mappages KERNBASE");
+
+  // map kernel data and the physical RAM we'll make use of.
+  // kvmmap((uint64)etext, (uint64)etext, PHYSTOP - (uint64)etext, PTE_R | PTE_W);
+  if(mappages(k_pagetable, (uint64)etext, PHYSTOP - (uint64)etext, (uint64)etext, PTE_R | PTE_W)) panic("kproc_pagetable mappages etext");
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  // kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+  if(mappages(k_pagetable, TRAMPOLINE, PGSIZE, (uint64)trampoline, PTE_R | PTE_X)) panic("kproc_pagetable mappages TRAMPOLINE");
+
+  return k_pagetable;
+}
+
+
+// Switch h/w page table register to the process-standalone kernel page table,
+void kvm_kpagetable(pagetable_t kpt)
+{
+  w_satp(MAKE_SATP(kpt));
+  sfence_vma();
+}
+
 // Switch h/w page table register to the kernel's page table,
 // and enable paging.
 void kvminithart() {
@@ -396,8 +441,9 @@ void printwalk(pagetable_t pt, int depth, uint64 va)
       flags[3] = (pte & PTE_U) ? 'u' : '-';
 
       int offset = ((2 - depth) * 9) + 12;
-      va &= ~(PXMASK << offset);
-      va |= i << offset;
+      // printf("original va: %p, depth: %d, off: %d\n", va, depth, offset);
+      va &= ~((uint64)PXMASK << offset);
+      va |= (uint64)i << offset;
 
       if(depth == 2) {
         // leaf
@@ -420,4 +466,19 @@ void vmprint(pagetable_t pagetable)
 {
   printf("page table %p\n", pagetable);
   printwalk(pagetable, 0, 0);
+}
+
+void kproc_freepagetable(pagetable_t pt)
+{
+  uvmunmap(pt, UART0, 1, 0);
+  uvmunmap(pt, VIRTIO0, 1, 0);
+  uvmunmap(pt, PLIC, PGROUNDUP(0x400000) / PGSIZE, 0);
+  uvmunmap(pt, KERNBASE, PGROUNDUP((uint64)etext - KERNBASE) / PGSIZE, 0);
+  uvmunmap(pt, (uint64)etext, PGROUNDUP(PHYSTOP - (uint64)etext) / PGSIZE, 0);
+  uvmunmap(pt, TRAMPOLINE, 1, 0);
+
+  // printf("kproc_freepagetable\n");
+  // vmprint(pt);
+
+  freewalk(pt);
 }
