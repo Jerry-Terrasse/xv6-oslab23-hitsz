@@ -183,6 +183,12 @@ void            vmprint(pagetable_t);
 pagetable_t     kproc_pagetable();
 void            kproc_freepagetable(pagetable_t);
 void            kvm_kpagetable(pagetable_t);
+void            sync_pagetable(pagetable_t, pagetable_t);
+void            check_userdata(pagetable_t);
+
+// vmcopyin.c
+int             copyin_new(pagetable_t, char *, uint64, uint64);
+int             copyinstr_new(pagetable_t, char *, uint64, uint64);
 
 // plic.c
 void            plicinit(void);

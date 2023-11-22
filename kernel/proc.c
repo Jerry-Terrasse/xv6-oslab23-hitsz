@@ -132,6 +132,7 @@ found:
 static void freeproc(struct proc *p) {
   if (p->trapframe) kfree((void *)p->trapframe);
   p->trapframe = 0;
+  if (p->k_pagetable) sync_pagetable(0, p->k_pagetable);
   if (p->k_pagetable && p->kstack_pa) uvmunmap(p->k_pagetable, p->kstack, 1, 0);
   if (p->k_pagetable) kproc_freepagetable(p->k_pagetable);
   if (p->pagetable) proc_freepagetable(p->pagetable, p->sz);
@@ -190,6 +191,7 @@ uchar initcode[] = {0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x45, 0x02, 0x97, 0x05, 
                     0x20, 0x00, 0x73, 0x00, 0x00, 0x00, 0xef, 0xf0, 0x9f, 0xff, 0x2f, 0x69, 0x6e,
                     0x69, 0x74, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
+
 // Set up first user process.
 void userinit(void) {
   struct proc *p;
@@ -201,6 +203,7 @@ void userinit(void) {
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
+  sync_pagetable(p->pagetable, p->k_pagetable);
 
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
@@ -229,6 +232,8 @@ int growproc(int n) {
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
   p->sz = sz;
+
+  sync_pagetable(p->pagetable, p->k_pagetable);
   return 0;
 }
 
@@ -251,6 +256,9 @@ int fork(void) {
     return -1;
   }
   np->sz = p->sz;
+
+  // sync user pagetable to kernel pagetable
+  sync_pagetable(np->pagetable, np->k_pagetable);
 
   np->parent = p;
 

@@ -361,6 +361,11 @@ int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) {
 // Copy len bytes to dst from virtual address srcva in a given page table.
 // Return 0 on success, -1 on error.
 int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
+  w_sstatus(r_sstatus() | SSTATUS_SUM);
+  int res = copyin_new(pagetable, dst, srcva, len);
+  w_sstatus(r_sstatus() & ~SSTATUS_SUM);
+  return res;
+
   uint64 n, va0, pa0;
 
   while (len > 0) {
@@ -383,6 +388,11 @@ int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
 // until a '\0', or max.
 // Return 0 on success, -1 on error.
 int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max) {
+  w_sstatus(r_sstatus() | SSTATUS_SUM);
+  int res = copyinstr_new(pagetable, dst, srcva, max);
+  w_sstatus(r_sstatus() & ~SSTATUS_SUM);
+  return res;
+
   uint64 n, va0, pa0;
   int got_null = 0;
 
@@ -465,6 +475,7 @@ void printwalk(pagetable_t pt, int depth, uint64 va)
 void vmprint(pagetable_t pagetable)
 {
   printf("page table %p\n", pagetable);
+  if(!pagetable) return;
   printwalk(pagetable, 0, 0);
 }
 
@@ -481,4 +492,64 @@ void kproc_freepagetable(pagetable_t pt)
   // vmprint(pt);
 
   freewalk(pt);
+}
+
+void sync_pagetable(pagetable_t upt, pagetable_t kpt)
+{
+  // vmprint(upt);
+  static const uint64 UVM_MAX = 0x1;
+  // clear original mapping
+  for(uint64 va0 = 0x0; va0 < UVM_MAX; va0 += (PGSIZE << 18)) {
+    pte_t *sub_pte = &kpt[PX(2, va0)];
+    if(!(*sub_pte & PTE_V)) {
+      continue;
+    }
+    
+    pagetable_t sub_pt = (pagetable_t)PTE2PA(*sub_pte);
+    for(uint64 va1 = va0; va1 < (va0 + (PGSIZE << 18)) && va1 < UVM_MAX; va1 += (PGSIZE << 9)) {
+      sub_pt[PX(1, va1)] = 0;
+    }
+  }
+
+  if (upt == 0) {
+    return;
+  }
+
+  // map user to kernel
+  for(uint64 va = 0x0; va < UVM_MAX; va += (PGSIZE << 18)) {
+    pte_t u_sub_pte = upt[PX(2, va)];
+    if(!(u_sub_pte & PTE_V)) {
+      continue;
+    }
+
+    pte_t *sub_pte = &kpt[PX(2, va)];
+    pagetable_t sub_pt = 0;
+    if(*sub_pte & PTE_V) {
+      sub_pt = (pagetable_t)PTE2PA(*sub_pte);
+    } else {
+      sub_pt = (pagetable_t)kalloc();
+      if(sub_pt == 0) panic("sync_pagetable: kalloc");
+      memset(sub_pt, 0, PGSIZE);
+      *sub_pte = PA2PTE(sub_pt) | PTE_V;
+    }
+
+    // now we have sub_pt
+    pagetable_t u_sub_pt = (pagetable_t)PTE2PA(u_sub_pte);
+    for(uint64 va1 = va; va1 < (va + (PGSIZE << 18)) && va1 < UVM_MAX; va1 += (PGSIZE << 9)) {
+      pte_t u_leaf_pte = u_sub_pt[PX(1, va1)];
+      pte_t *leaf_pte = &sub_pt[PX(1, va1)];
+      *leaf_pte = u_leaf_pte;
+    }
+  }
+}
+
+void check_userdata(pagetable_t pt) {
+  for(uint64 va = 0; va < 0xC000000; va += PGSIZE) {
+    uint64 pa = walkaddr(pt, va);
+    if(pa != 0) {
+      printf("va: %p, pa: %p\n", va, pa);
+      panic("check_pt");
+    }
+  }
+  printf("all ok\n");
 }
