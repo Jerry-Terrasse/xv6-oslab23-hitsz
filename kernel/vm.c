@@ -497,7 +497,7 @@ void kproc_freepagetable(pagetable_t pt)
 void sync_pagetable(pagetable_t upt, pagetable_t kpt)
 {
   // vmprint(upt);
-  static const uint64 UVM_MAX = 0x1;
+  static const uint64 UVM_MAX = 0xC000000;
   // clear original mapping
   for(uint64 va0 = 0x0; va0 < UVM_MAX; va0 += (PGSIZE << 18)) {
     pte_t *sub_pte = &kpt[PX(2, va0)];
